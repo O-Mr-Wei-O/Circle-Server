@@ -63,12 +63,62 @@ router.post('/api/register', function (req, res) {
                 // console.error(err);
                 res.json('fail');
             } else {
-                console.log(rows);
+                // console.log(rows);
                 res.json('success');
             }
         });
 
     }
+});
+
+//登录
+router.post('/api/login', function (req, res) {
+    if (req.body.data) {
+        // console.log(req.body.data);
+        const email = req.body.data.email;
+        const password = req.body.data.password;
+        let sql = 'select * from user';
+        sql += ' where email = \'' + email + '\'';
+        db.query(sql, function (err, rows) {
+            if (err) {
+                console.error('查询失败：' + err);
+            } else {
+                if (rows.length != 0) {
+                    //返回的数组先转化为json字符串
+                    const rowsString = JSON.stringify(rows);
+                    // JSON字符串转换为JSON对象
+                    const rowsObject = JSON.parse(rowsString);
+                    // console.log(rowsObject[0].password);
+                    if (rowsObject[0].password == password) {
+                        db.query('select * from admin where email = \'' + email + '\'', function (err, rows) {
+                            if (rows.length != 0) {
+                                res.json({
+                                    login: 'loginSuccess',
+                                    nickname: rowsObject[0].nickname,
+                                    email: email,
+                                    // admin中1表示是管理员账户，0表示不是管理员
+                                    admin: 1
+                                });
+                            }else if (rows.length == 0) {
+                                res.json({
+                                    login: 'loginSuccess',
+                                    nickname: rowsObject[0].nickname,
+                                    email: email,
+                                    // admin中1表示是管理员账户，0表示不是管理员
+                                    admin: 0
+                                });
+                            }
+                        });
+                    } else {
+                        res.json({login: 'loginFail', nickname: null, email: null});
+                    }
+                } else {
+                    res.json({login: 'loginFail', nickname: null, email: null});
+                }
+            }
+        });
+    }
+    // res.end();
 });
 
 module.exports = router;
