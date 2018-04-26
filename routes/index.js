@@ -7,6 +7,18 @@ var bodyParser = require('body-parser');
 var db = require('../config/db');
 var captcha = require('../config/sendCaptcha');
 
+
+var co = require('co');
+var OSS = require('ali-oss');
+var fs = require("fs");
+var client = new OSS({
+    region: 'oss-cn-beijing',
+    accessKeyId: 'LTAI7wlX2c74LiOo',
+    accessKeySecret: 'yQCDa7x7HUjpR3ezzJX39LIVI9sto4',
+    bucket: 'graduationdesign'
+});
+
+
 //获取不同type的新闻
 router.get('/api/top_News/:type', function (req, res) {
     // console.log(req.params.type);
@@ -119,6 +131,22 @@ router.post('/api/login', function (req, res) {
         });
     }
     // res.end();
+});
+
+// 上传头像
+router.post('/api/upload',function (req,res) {
+    co(function* () {
+        // use 'chunked encoding'
+        var stream = fs.createReadStream('C:\\Users\\bo\\Desktop\\需求.txt');
+        var result = yield client.putStream('需求.txt', stream);
+        // console.log(result);
+        if (result.res.status == 200){
+            // 将外链地址返回给前台
+            res.json(result.res.requestUrls[0]);
+        }
+    }).catch(function (err) {
+        console.error(err);
+    });
 });
 
 module.exports = router;
