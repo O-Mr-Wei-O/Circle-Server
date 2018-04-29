@@ -6,6 +6,7 @@ var mysql = require('mysql');
 var bodyParser = require('body-parser');
 var db = require('../config/db');
 var captcha = require('../config/sendCaptcha');
+var moment = require('moment');
 const formidable = require('formidable');
 
 
@@ -60,7 +61,7 @@ router.post('/api/captcha', function (req, res) {
         // 生成随机6位验证码
         const captchaCode = Math.random().toString(36).substr(7);
         captcha.sendCaptcha(email, captchaCode);
-        // console.log(captchaCode);
+        console.log(captchaCode);
         res.json(captchaCode);
     }
 });
@@ -72,6 +73,7 @@ router.post('/api/register', function (req, res) {
         const email = req.body.data.email;
         const password = req.body.data.password;
         const nickname = req.body.data.nickname;
+        const defaultAvatar = 'https://graduationdesign.oss-cn-beijing.aliyuncs.com/%E4%BA%91%E6%9C%B5%E5%A4%B4%E5%83%8F.jpeg';
         //用户表注册
         db.query('insert into user(email,password,nickname) values(\'' + email + '\',\'' + password + '\',\'' + nickname + '\')', function (err, rows) {
             if (err) {
@@ -79,8 +81,8 @@ router.post('/api/register', function (req, res) {
                 res.json('fail');
             } else {
                 // console.log(rows);
-                // 生成个人信息（在表personalInfo里面）
-                db.query('insert into personalInfo(avatar,nickname,sex,birthday,email) values(null,\'' + nickname + '\',1,null,\'' + email + '\')', function (err, rows) {
+                // 生成个人信息（在表personalinfo里面）
+                db.query('insert into personalinfo(avatar,nickname,sex,birthday,email) values(\'' + defaultAvatar + '\',\'' + nickname + '\',1,null,\'' + email + '\')', function (err, rows) {
                     if (err) {
                         console.error(err);
                     } else {
@@ -144,6 +146,7 @@ router.post('/api/login', function (req, res) {
     // res.end();
 });
 
+// 获取个人信息
 router.post('/api/getPersonalInfo', function (req, res) {
     if (req.body.data) {
         const email = req.body.data;
@@ -240,5 +243,95 @@ router.post('/api/updatePersonalInfo/:type', function (req, res) {
         }
     });
 
+});
+
+// 上传文件接口
+router.post('/api/upload', function (req, res) {
+    // 跨域
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "PUT,POST,GET,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type,Content-Length, Authorization, Accept,X-Requested-With");
+
+    let form = new formidable.IncomingForm();
+    form.encoding = 'utf-8'; // 编码
+    form.keepExtensions = true; // 保留扩展名
+    form.maxFieldsSize = 2 * 1024 * 1024; // 文件大小
+    form.uploadDir = './public/images';  // 存储路径
+    form.parse(req, function (err, fileds, files) { // 解析 formData数据
+        if (err) {
+            return console.log(err)
+        }
+        // console.log(files);
+        // 这里的avatar是前台的组件里name
+        let imgPath = files.file.path; // 获取文件路径
+        let imgName = files.file.name; // 文件原名
+        // oss上传文件开始
+        co(function* () {
+            var stream = fs.createReadStream(imgPath);
+            var result = yield client.putStream(imgName, stream);
+            // console.log(result);
+            // 返回文件外链地址
+            res.json(result.res.requestUrls[0]);
+        });
+        // 上传结束
+        fs.unlink(imgPath, function () {
+        });// 删除文件，不保存
+    })
+});
+
+// 写日记接口
+router.post('/api/diary', function (req, res) {
+    // console.log('-----');
+    const email = req.body.email;
+    const title = req.body.title;
+    const content = req.body.content;
+    const pic = req.body.pic;
+    // moment(1124995030449).toObject()使用这个分解为对象
+    const nowtime = moment().valueOf();
+    db.query('insert into diary(email,title,content,pic,createtime) values(\'' + email + '\',\'' + title + '\',\'' + content + '\',\'' + pic + '\',\'' + nowtime + '\')', function (err, rows) {
+        if (err) {
+            console.error(err);
+            res.json(false);
+        } else {
+            res.json(true);
+        }
+    });
+});
+
+// 获取圈子信息
+router.post('/api/circle', function (req, res) {
+    // left join on左表查询方式，通过diary.id这种方式选择需要的字段留下来，如果选择*，则会有重复字段
+    db.query('SELECT diary.id as diaryid,diary.email as email,title,content,pic,createtime,nickname,avatar FROM socialweb.diary left join personalinfo on personalinfo.email=diary.email;', function (err, rows) {
+        if (rows.length != 0) {
+            // console.log(rows);
+            // res.end();
+            db.query('SELECT  diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email;', function (err, rows1) {
+                if (rows1.length != 0) {
+                    // console.log(rows);
+                    console.log({diary: rows, comment: rows1});
+                    res.json({diary: rows, comment: rows1});
+                } else {
+                    res.json({diary: rows, comment: []});
+                }
+            });
+        } else {
+            res.json({diary: [], comment: []});
+        }
+    });
+});
+
+// 评论
+router.post('/api/comment', function (req, res) {
+    // console.log(req.body);
+    const {email, diaryid, pid, replyid, commentText} = req.body;
+    const nowtime = moment().valueOf();
+    db.query('insert into comment(email,diaryid,pid,replyid,comment,createtime) values(\'' + email + '\',\'' + diaryid + '\',\'' + pid + '\',\'' + replyid + '\',\'' + commentText + '\',\'' + nowtime + '\')', function (err, rows) {
+        if (err) {
+            console.error(err);
+            res.json(false);
+        } else {
+            res.json(true);
+        }
+    });
 });
 module.exports = router;
