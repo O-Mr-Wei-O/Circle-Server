@@ -10,6 +10,8 @@ var moment = require('moment');
 const formidable = require('formidable');
 
 
+
+// oss存储
 var co = require('co');
 var OSS = require('ali-oss');
 var fs = require("fs");
@@ -293,6 +295,7 @@ router.post('/api/diary', function (req, res) {
             console.error(err);
             res.json(false);
         } else {
+            console.log(rows);
             res.json(true);
         }
     });
@@ -301,17 +304,34 @@ router.post('/api/diary', function (req, res) {
 // 获取圈子信息
 router.post('/api/circle', function (req, res) {
     // left join on左表查询方式，通过diary.id这种方式选择需要的字段留下来，如果选择*，则会有重复字段
-    db.query('SELECT diary.id as diaryid,diary.email as email,title,content,pic,createtime,nickname,avatar FROM socialweb.diary left join personalinfo on personalinfo.email=diary.email;', function (err, rows) {
+    db.query('SELECT diary.id as diaryid,diary.email as email,title,content,pic,createtime,nickname,avatar,number,who FROM socialweb.diary left join personalinfo on personalinfo.email=diary.email left join diaryzan on diary.id=diaryzan.diaryid order by diaryid;', function (err, rows) {
         if (rows.length != 0) {
             // console.log(rows);
             // res.end();
-            db.query('SELECT  diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email;', function (err, rows1) {
+            db.query('SELECT comment.id as commentid, diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email order by comment.id;', function (err, rows1) {
                 if (rows1.length != 0) {
                     // console.log(rows);
-                    console.log({diary: rows, comment: rows1});
-                    res.json({diary: rows, comment: rows1});
-                } else {
-                    res.json({diary: rows, comment: []});
+                    db.query('SELECT comment.id as commentid, diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email where pid !=0 and replyid !=0 order by comment.id;', function (err, rows2) {
+                        if (rows2.length != 0) {
+                            for (let i = 0; i < rows1.length; i++) {
+                                let obj = new Object();
+                                let replydata = [];
+                                for (let j = 0; j < rows2.length; j++) {
+                                    if (rows1[i].commentid == rows2[j].pid) {
+                                        replydata.push(rows2[j]);
+                                    }
+                                }
+                                obj.data = replydata;
+                                rows1[i].reply = obj.data;
+                            }
+                            db.query('select * from diarycollect where email=\'' + req.body.email + '\'', function (err, rows3) {
+                                res.json({diary: rows, comment: rows1, collectDiary: rows3[0].diaryid});
+                            });
+                            // console.log({diary: rows, comment: rows1});
+                        } else {
+                            res.json({diary: rows, comment: []});
+                        }
+                    });
                 }
             });
         } else {
@@ -334,4 +354,80 @@ router.post('/api/comment', function (req, res) {
         }
     });
 });
+
+// 点赞
+router.post('/api/zan', function (req, res) {
+    // console.log(req.body);
+    let {diaryid, email, number, who} = req.body;
+    // console.log(sql);
+    db.query('select * from diaryzan where diaryid=' + diaryid, function (err, rows) {
+        if (err) {
+            res.send(err);
+        } else {
+            // console.log(rows);
+            if (rows.length != 0) {
+                // 已有数据的情况更新
+                number++;
+                let who = rows[0].who + ',' + email;
+                db.query('update diaryzan set number=\'' + number + '\', who =\'' + who + '\' where diaryid =  \'' + diaryid + '\'', function (err, rows) {
+                    if (err) {
+                        console.error("点赞失败 " + err);
+                    } else {
+                        res.end();
+                    }
+                });
+            } else {
+                // 没有数据的情况插入
+                number++;
+                db.query('insert into diaryzan(diaryid,number,who) values(\'' + diaryid + '\',\'' + number + '\',\'' + email + '\')', function (err, rows) {
+                    if (err) {
+                        console.error("点赞失败 " + err);
+                    } else {
+                        res.end();
+                    }
+                });
+            }
+
+        }
+    });
+});
+
+// 收藏
+router.post('/api/collect', function (req, res) {
+    // console.log(req.body);
+    let {diaryid, email} = req.body;
+    db.query('select * from diarycollect where email=\'' + email + '\'', function (err, rows) {
+        if (err) {
+            res.send(err);
+        } else {
+            console.log(rows);
+            if (rows.length != 0) {
+                // 已有数据的情况更新
+                let diary = rows[0].diaryid + ',' + diaryid;
+                console.log(diaryid);
+                db.query('update diarycollect set diaryid=\'' + diary + '\' where email =  \'' + email + '\'', function (err, rows) {
+                    if (err) {
+                        console.error("点赞失败 " + err);
+                    } else {
+                        res.end();
+                    }
+                });
+            } else {
+                // 没有数据的情况插入
+                db.query('insert into diarycollect(email,diaryid) values(\'' + email + '\',\'' + diaryid + '\')', function (err, rows) {
+                    if (err) {
+                        console.error("点赞失败 " + err);
+                    } else {
+                        res.end();
+                    }
+                });
+            }
+
+        }
+    });
+});
+
+// router.get('/api/test',function (req,res) {
+//     res.send('router');
+// });
 module.exports = router;

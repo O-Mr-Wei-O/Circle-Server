@@ -5,6 +5,7 @@ var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 
+
 var index = require('./routes/index');
 var users = require('./routes/users');
 
@@ -41,6 +42,15 @@ app.use(function (err, req, res, next) {
     // render the error page
     res.status(err.status || 500);
     res.render('error');
+    next();
 });
+
+var io = app.io = require("socket.io")();
+io.on("connection", function (socket) {
+    console.log("A user connected");
+    socket.emit('successlogin','连接成功');
+});
+
+
 
 module.exports = app;
