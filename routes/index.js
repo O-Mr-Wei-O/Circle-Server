@@ -10,7 +10,6 @@ var moment = require('moment');
 const formidable = require('formidable');
 
 
-
 // oss存储
 var co = require('co');
 var OSS = require('ali-oss');
@@ -104,7 +103,7 @@ router.post('/api/login', function (req, res) {
         // console.log(req.body.data);
         const email = req.body.data.email;
         const password = req.body.data.password;
-        let sql = 'select * from user';
+        let sql = 'select * from (SELECT user.*,userbaned.userid as banid FROM socialweb.user left join userbaned on  user.id=userbaned.userid order by id) as t';
         sql += ' where email = \'' + email + '\'';
         db.query(sql, function (err, rows) {
             if (err) {
@@ -115,25 +114,48 @@ router.post('/api/login', function (req, res) {
                     const rowsString = JSON.stringify(rows);
                     // JSON字符串转换为JSON对象
                     const rowsObject = JSON.parse(rowsString);
+                    // true表示被封禁，false表示未被封禁
+                    const banid = rowsObject[0].banid ? true : false;
+                    // console.log(banid);
                     // console.log(rowsObject[0].password);
                     if (rowsObject[0].password == password) {
                         db.query('select * from admin where email = \'' + email + '\'', function (err, rows) {
                             if (rows.length != 0) {
-                                res.json({
-                                    login: 'loginSuccess',
-                                    nickname: rowsObject[0].nickname,
-                                    email: email,
-                                    // admin中1表示是管理员账户，0表示不是管理员
-                                    admin: 1
-                                });
+                                if (banid == true) {
+                                    res.json({
+                                        login: 'baned',
+                                        nickname: rowsObject[0].nickname,
+                                        email: email,
+                                        // admin中1表示是管理员账户，0表示不是管理员
+                                        admin: 1
+                                    });
+                                } else if (banid == false) {
+                                    res.json({
+                                        login: 'loginSuccess',
+                                        nickname: rowsObject[0].nickname,
+                                        email: email,
+                                        // admin中1表示是管理员账户，0表示不是管理员
+                                        admin: 1
+                                    });
+                                }
                             } else if (rows.length == 0) {
-                                res.json({
-                                    login: 'loginSuccess',
-                                    nickname: rowsObject[0].nickname,
-                                    email: email,
-                                    // admin中1表示是管理员账户，0表示不是管理员
-                                    admin: 0
-                                });
+                                if (banid == true) {
+                                    res.json({
+                                        login: 'baned',
+                                        nickname: rowsObject[0].nickname,
+                                        email: email,
+                                        // admin中1表示是管理员账户，0表示不是管理员
+                                        admin: 0
+                                    });
+                                } else if (banid == false) {
+                                    res.json({
+                                        login: 'loginSuccess',
+                                        nickname: rowsObject[0].nickname,
+                                        email: email,
+                                        // admin中1表示是管理员账户，0表示不是管理员
+                                        admin: 0
+                                    });
+                                }
                             }
                         });
                     } else {
@@ -304,38 +326,77 @@ router.post('/api/diary', function (req, res) {
 // 获取圈子信息
 router.post('/api/circle', function (req, res) {
     // left join on左表查询方式，通过diary.id这种方式选择需要的字段留下来，如果选择*，则会有重复字段
-    db.query('SELECT diary.id as diaryid,diary.email as email,title,content,pic,createtime,nickname,avatar,number,who FROM socialweb.diary left join personalinfo on personalinfo.email=diary.email left join diaryzan on diary.id=diaryzan.diaryid order by diaryid;', function (err, rows) {
+    db.query('SELECT diary.id as diaryid,diary.email as email,title,content,pic,createtime,nickname,avatar,number,who,reporter FROM socialweb.diary left join personalinfo on personalinfo.email=diary.email left join diaryzan on diary.id=diaryzan.diaryid left join diaryreport on diaryreport.diaryid=diary.id order by diaryid;', function (err, rows) {
         if (rows.length != 0) {
             // console.log(rows);
             // res.end();
-            db.query('SELECT comment.id as commentid, diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email order by comment.id;', function (err, rows1) {
-                if (rows1.length != 0) {
-                    // console.log(rows);
-                    db.query('SELECT comment.id as commentid, diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email where pid !=0 and replyid !=0 order by comment.id;', function (err, rows2) {
-                        if (rows2.length != 0) {
-                            for (let i = 0; i < rows1.length; i++) {
-                                let obj = new Object();
-                                let replydata = [];
-                                for (let j = 0; j < rows2.length; j++) {
-                                    if (rows1[i].commentid == rows2[j].pid) {
-                                        replydata.push(rows2[j]);
-                                    }
-                                }
-                                obj.data = replydata;
-                                rows1[i].reply = obj.data;
+
+            // 剔除被封禁的日记
+            db.query('select * from diarybaned', function (err, rows5) {
+                if (err) {
+                    console.error(err);
+                } else {
+                    // console.log(rows5);
+                    let rowsSelect = [];
+                    let rows5Array = [];
+                    if (rows5.length != 0) {
+                        // 将rows5的id放入数组以便进行比较
+                        for (let i=0;i<rows5.length;i++){
+                            rows5Array.push(rows5[i].diaryid);
+                        }
+
+                        // 将日记筛选后放入新数组
+                        for (let i = 0; i < rows.length; i++) {
+                            if (rows5Array.indexOf(rows[i].diaryid.toString())==-1) {
+                                rowsSelect.push(rows[i]);
                             }
-                            db.query('select * from diarycollect where email=\'' + req.body.email + '\'', function (err, rows3) {
-                                res.json({diary: rows, comment: rows1, collectDiary: rows3[0].diaryid});
+                        }
+                        // console.log(rowsSelect);
+                    } else {
+                        rowsSelect = rows;
+                    }
+
+                    db.query('SELECT comment.id as commentid, diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email order by comment.id;', function (err, rows1) {
+                        if (rows1.length != 0) {
+                            // console.log(rows);
+                            db.query('SELECT comment.id as commentid, diaryid,comment.email as email,pid,replyid,comment,createtime,avatar,nickname FROM socialweb.comment left join personalinfo on personalinfo.email=comment.email where pid !=0 and replyid !=0 order by comment.id;', function (err, rows2) {
+                                if (rows2.length != 0) {
+                                    for (let i = 0; i < rows1.length; i++) {
+                                        let obj = new Object();
+                                        let replydata = [];
+                                        for (let j = 0; j < rows2.length; j++) {
+                                            if (rows1[i].commentid == rows2[j].pid) {
+                                                replydata.push(rows2[j]);
+                                            }
+                                        }
+                                        obj.data = replydata;
+                                        rows1[i].reply = obj.data;
+                                    }
+                                    db.query('select * from diarycollect where email=\'' + req.body.email + '\'', function (err, rows3) {
+                                        if (rows3.length != 0) {
+                                            // console.log(rowsSelect);
+                                            res.json({
+                                                diary: rowsSelect,
+                                                comment: rows1,
+                                                collectDiary: rows3[0].diaryid
+                                            });
+                                        } else {
+                                            res.json({diary: rowsSelect, comment: rows1, collectDiary: ''});
+                                        }
+                                    });
+                                    // console.log({diary: rows, comment: rows1});
+                                } else {
+                                    res.json({diary: rowsSelect, comment: []});
+                                }
                             });
-                            // console.log({diary: rows, comment: rows1});
-                        } else {
-                            res.json({diary: rows, comment: []});
                         }
                     });
                 }
             });
+
+
         } else {
-            res.json({diary: [], comment: []});
+            res.json({});
         }
     });
 });
@@ -427,7 +488,134 @@ router.post('/api/collect', function (req, res) {
     });
 });
 
-// router.get('/api/test',function (req,res) {
-//     res.send('router');
-// });
+// 举报
+router.post('/api/report', function (req, res) {
+    let {diaryid, reporter} = req.body;
+    db.query('select * from diaryreport where diaryid=\'' + diaryid + '\'', function (err, rows) {
+        if (rows.length != 0) {
+            // 已有数据的情况更新
+            let reporterString = rows[0].reporter + ',' + reporter;
+            db.query('update diaryreport set reporter=\'' + reporterString + '\' where diaryid =  \'' + diaryid + '\'', function (err, rows) {
+                if (err) {
+                    console.error("举报失败 " + err);
+                } else {
+                    res.end();
+                }
+            });
+        } else {
+            // 没有数据的情况插入
+            db.query('insert into diaryreport(diaryid,reporter) values(\'' + diaryid + '\',\'' + reporter + '\')', function (err, rows) {
+                if (err) {
+                    console.error("举报失败 " + err);
+                } else {
+                    res.end();
+                }
+            });
+        }
+    });
+});
+
+// 获取举报的日记
+router.post('/api/getreport', function (req, res) {
+    db.query('select diaryid,reporter,title,content,pic,createtime,user.email,nickname,user.id as userid from (diaryreport left join diary on diaryreport.diaryid=diary.id) left join user on diary.email=user.email order by diaryid; ', function (err, rows) {
+        // console.log(rows);
+        let diary = [];
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].reporter.split(',').length > 1) {
+                diary.push(rows[i]);
+            }
+        }
+        res.json(diary);
+    });
+});
+
+// 封禁用户和日记
+router.post('/api/ban', function (req, res) {
+    // console.log(req.body);
+    const {diaryid, userid} = req.body;
+    // 封禁日记
+    db.query('insert into diarybaned(diaryid) values(\'' + diaryid + '\')', function (err, rows) {
+        if (err) {
+            console.error(err);
+        } else {
+            // 封禁用户
+            db.query('insert into userbaned(userid) values(\'' + userid + '\')', function (err, rows) {
+                if (err) {
+                    console.error(err);
+                } else {
+                    // 删除diaryreport表中的相应数据，即已处理
+                    db.query('delete from diaryreport where diaryid=\'' + diaryid + '\'', function (err, rows) {
+                        if (err) {
+                            console.error(err);
+                        } else {
+                            res.end();
+                        }
+                    });
+                }
+            });
+        }
+    });
+});
+
+// 申请解封（添加进数据库）        日记 确认违规不可解封！！！！！！！！
+router.post('/api/unseal', function (req, res) {
+    // console.log(req.body);
+    const {email, reason} = req.body.data;
+    db.query('select * from unseal where proposer=\'' + email + '\'', function (err, rows) {
+        if (rows.length != 0) {
+            // 已有数据的情况更新
+            db.query('update unseal set reason=\'' + reason + '\' where proposer =  \'' + email + '\'', function (err, rows) {
+                if (err) {
+                    console.error("查询解封失败 " + err);
+                } else {
+                    res.end();
+                }
+            });
+        } else {
+            // 没有数据的情况插入
+            db.query('insert into unseal(proposer,reason) values(\'' + email + '\',\'' + reason + '\')', function (err, rows) {
+                if (err) {
+                    console.error("插入解封数据失败 " + err);
+                } else {
+                    res.end();
+                }
+            });
+        }
+    });
+});
+
+// 获取解封申请信息
+router.post('/api/getunseal', function (req, res) {
+    db.query('SELECT * FROM socialweb.unseal;', function (err, rows) {
+        if (err) {
+            console.error(err);
+        } else {
+            res.json(rows);
+        }
+    });
+});
+
+// 解封
+router.post('/api/approveunseal/:proposer', function (req, res) {
+    const proposer = req.params.proposer;
+    db.query('select user.id from unseal left join  user on unseal.proposer=user.email;', function (err, rows) {
+        console.log(rows);
+        if (rows.length != 0) {
+            db.query('delete from userbaned where userid=\'' + rows[0].id + '\'', function (err, rows) {
+                if (err) {
+                    console.error(err);
+                } else {
+                    db.query('delete from unseal where proposer=\'' + proposer + '\'', function (err, rows) {
+                        if (err) {
+                            console.error(err);
+                        } else {
+                            res.end();
+
+                        }
+                    });
+                }
+            });
+        }
+    });
+});
 module.exports = router;
