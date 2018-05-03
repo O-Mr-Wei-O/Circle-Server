@@ -341,13 +341,13 @@ router.post('/api/circle', function (req, res) {
                     let rows5Array = [];
                     if (rows5.length != 0) {
                         // 将rows5的id放入数组以便进行比较
-                        for (let i=0;i<rows5.length;i++){
+                        for (let i = 0; i < rows5.length; i++) {
                             rows5Array.push(rows5[i].diaryid);
                         }
 
                         // 将日记筛选后放入新数组
                         for (let i = 0; i < rows.length; i++) {
-                            if (rows5Array.indexOf(rows[i].diaryid.toString())==-1) {
+                            if (rows5Array.indexOf(rows[i].diaryid.toString()) == -1) {
                                 rowsSelect.push(rows[i]);
                             }
                         }
@@ -611,6 +611,132 @@ router.post('/api/approveunseal/:proposer', function (req, res) {
                         } else {
                             res.end();
 
+                        }
+                    });
+                }
+            });
+        }
+    });
+});
+
+
+// 模糊搜索用户
+router.post('/api/searchuserVague', function (req, res) {
+    // console.log(req.body.email);
+    if (req.body.email != '') {
+        // console.log(req.body.value);
+        db.query('SELECT user.id as userid,user.email,user.nickname,personalinfo.avatar,userfollow.ifollowemail,userfollow.followedme FROM (socialweb.user left join personalinfo on user.email=personalinfo.email left join userfollow on user.email=userfollow.email) where user.email like \'%' + req.body.value + '%\'  or  user.nickname like \'%' + req.body.value + '%\';', function (err, rows) {
+            if (err) {
+                console.error(err);
+            } else {
+                // console.log(rows);
+                res.json(rows);
+            }
+        });
+    }
+});
+
+// 精准匹配用户
+router.post('/api/searchuserAccurate', function (req, res) {
+    // console.log(req.body.email);
+    if (req.body.email != '') {
+        // console.log(req.body.value);
+        db.query('SELECT user.id as userid,user.email,user.nickname,personalinfo.avatar,userfollow.ifollowemail,userfollow.followedme FROM (socialweb.user left join personalinfo on user.email=personalinfo.email left join userfollow on user.email=userfollow.email) where user.email = \'' + req.body.value + '\'  or  user.nickname = \'' + req.body.value + '\';', function (err, rows) {
+            if (err) {
+                console.error(err);
+            } else {
+                // console.log(rows);
+                res.json(rows);
+            }
+        });
+    }
+});
+
+// 关注某一用户（关注方式为email）
+router.post('/api/follow', function (req, res) {
+    // followdemail为要关注的email和myemail是我的email
+    const {followdemail, myemail} = req.body;
+    // console.log(followdemail, myemail);
+    db.query('select * from userfollow where email=\'' + myemail + '\'', function (err, rows) {
+        if (rows.length != 0) {
+            // 已有我的数据的情况下更新
+            let follow = rows[0].ifollowemail;
+            if (follow == null) {
+                follow = followdemail;
+            } else {
+                follow = follow + ',' + followdemail;
+            }
+            // 这一步添加进我的关注
+            db.query('update userfollow set ifollowemail=\'' + follow + '\' where email =  \'' + myemail + '\'', function (err, rows1) {
+                if (err) {
+                    console.error("查询解封失败 " + err);
+                } else {
+                    // 这一步先查找我要关注的用户是否有记录，如果有就更新它的关注者，如果没有就新插入
+                    db.query('select * from userfollow where email=\'' + followdemail + '\'', function (err, rows2) {
+                        if (rows2.length != 0) {
+                            // 已有数据的情况更新
+                            // console.log(rows2);
+                            let followedme = rows2[0].followedme;
+
+                            if (followedme == null) {
+                                followedme = myemail;
+                            } else {
+                                followedme = followedme + ',' + myemail;
+                            }
+
+                            db.query('update userfollow set followedme=\'' + followedme + '\' where email =  \'' + followdemail + '\'', function (err, rows3) {
+                                if (err) {
+                                    console.error(err);
+                                } else {
+                                    res.end();
+                                }
+                            });
+                        } else {
+                            // 没有数据的情况插入
+                            db.query('insert into userfollow(email,ifollowemail,followedme) values(\'' + followdemail + '\',null,\'' + myemail + '\')', function (err, row4) {
+                                if (err) {
+                                    console.error(err);
+                                } else {
+                                    res.end();
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        } else {
+            // 没有数据的情况插入
+            db.query('insert into userfollow(email,ifollowemail,followedme) values(\'' + myemail + '\',\'' + followdemail + '\',null)', function (err, rows5) {
+                if (err) {
+                    console.error(err);
+                } else {
+                    // 这一步先查找我要关注的用户是否有记录，如果有就更新它的关注者，如果没有就新插入
+                    db.query('select * from userfollow where email=\'' + followdemail + '\'', function (err, rows6) {
+                        if (rows.length != 0) {
+                            // 已有数据的情况更新
+                            let followedme = rows6[0].followedme;
+                            if (followedme == null) {
+                                followedme = myemail;
+                            } else {
+                                followedme = followedme + ',' + myemail;
+                            }
+
+                            db.query('update userfollow set followedme=\'' + followedme + '\' where email =  \'' + followdemail + '\'', function (err, rows7) {
+                                if (err) {
+                                    console.error(err);
+                                } else {
+                                    res.end();
+                                }
+                            });
+                        } else {
+                            // 没有数据的情况插入
+                            db.query('insert into userfollow(email,ifollowemail,followedme) values(\'' + followdemail + '\',null,\'' + myemail + '\')', function (err, row8) {
+                                if (err) {
+                                    console.error(err);
+                                } else {
+                                    res.end();
+                                }
+                            });
                         }
                     });
                 }
