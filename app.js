@@ -45,10 +45,35 @@ app.use(function (err, req, res, next) {
     next();
 });
 
+let userObject = {};
 var io = app.io = require("socket.io")();
 io.on("connection", function (socket) {
-    console.log("A user connected");
+    socket.on('email',(email)=>{
+        if (!userObject[email]) {
+            userObject[email]={email:email,socketid:socket.id};
+            // 发送广播给出自己以外的所有用户，通知已登录
+            socket.broadcast.emit('newLogin',email);
+            console.log("A user connected");
+            console.log(userObject);
+        }
+    });
+    // 用户退出
+    socket.on('logout', (email)=>{
+        if (userObject[email]) {
+            delete userObject[email];
+            console.log(userObject);
+        }
+        console.log('user disconnected');
+    });
+    app.post('/api/broadcast',function (req,res) {
+        const broadcastText = req.body.text;
+        io.sockets.emit('broadcast',broadcastText);
+        console.log('发送广播成功');
+    });
+    // socket.emit('alluser',userObject);
     socket.emit('successlogin','连接成功');
+
+    socket.on('disconnect', () => console.log('网页已关闭或者刷新，连接断开'));
 });
 
 
