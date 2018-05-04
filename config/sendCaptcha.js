@@ -17,9 +17,9 @@ function sendCaptcha(email, captcha) {
         to: email, // list of receivers
         // cc: 'haha<xxx@xxx.com>', // copy for receivers
         // bcc: 'haha<xxxx@xxxx.com>', // secret copy for receivers
-        subject: 'Circle注册验证码', // Subject line
+        subject: 'Circle验证码', // Subject line
         // text: '-----', // plaintext body
-        html: "您的注册验证码是 <span style='color: coral'>" + captcha + "</span> ！", // html body
+        html: "您的验证码是 <span style='color: coral'>" + captcha + "</span> ！", // html body
         // attachments: [
         //     {
         //         filename: 'text0.txt',

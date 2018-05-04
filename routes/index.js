@@ -59,6 +59,8 @@ router.post('/api/captcha', function (req, res) {
     // 阿里云只能进行国内的推送，不然显示连接超时
     if (req.body.data) {
         const email = req.body.data;
+        // console.log('接收到发送验证码请求');
+        // console.log(email);
         // 生成随机6位验证码
         const captchaCode = Math.random().toString(36).substr(7);
         captcha.sendCaptcha(email, captchaCode);
@@ -168,6 +170,20 @@ router.post('/api/login', function (req, res) {
         });
     }
     // res.end();
+});
+
+// 改密码
+router.post('/api/updatePwd', function (req, res) {
+    if (req.body) {
+        const {email, newPwd} = req.body;
+        db.query('update user set password=\'' + newPwd + '\' where email=\'' + email + '\'', function (err, rows) {
+            if (err) {
+                console.error(err);
+            }else {
+                res.end();
+            }
+        });
+    }
 });
 
 // 获取个人信息
@@ -330,9 +346,9 @@ router.post('/api/diarywhofollow', function (req, res) {
     db.query('SELECT * FROM socialweb.userfollow where userfollow.email = \'' + req.body.email + '\'', function (err, rows) {
         if (err) {
             console.error(err);
-        }else {
+        } else {
             let whoFollow = '';
-            if (rows.length!=0) {
+            if (rows.length != 0) {
                 whoFollow = rows[0].followedme ? rows[0].followedme : '';
             }
             res.json(whoFollow);
