@@ -65,11 +65,31 @@ io.on("connection", function (socket) {
         }
         console.log('user disconnected');
     });
+    // 发送广播
     app.post('/api/broadcast',function (req,res) {
         const broadcastText = req.body.text;
         io.sockets.emit('broadcast',broadcastText);
         console.log('发送广播成功');
     });
+    // 检查用户是否在线
+    socket.on('checkUserOnline',(email)=>{
+        if (userObject[email]) {
+            // 用户在线
+            io.sockets.connected[socket.id].emit('checkUserOnlineReturn', true);
+        }else {
+            io.sockets.connected[socket.id].emit('checkUserOnlineReturn', false);
+        }
+    });
+
+    //私聊：服务器接受到私聊信息，发送给目标用户
+    socket.on('private_message', function (from,to,msg) {
+        if (userObject[to]) {
+            console.log('emitting private message by ', from, ' say to ',to, msg);
+            io.sockets.connected[userObject[to].socketid].emit("pmsg",from,msg);
+        }
+
+    });
+
     // socket.emit('alluser',userObject);
     socket.emit('successlogin','连接成功');
 

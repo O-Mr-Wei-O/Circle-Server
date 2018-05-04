@@ -174,14 +174,16 @@ router.post('/api/login', function (req, res) {
 router.post('/api/getPersonalInfo', function (req, res) {
     if (req.body.data) {
         const email = req.body.data;
-        db.query('select * from personalinfo where email = \'' + email + '\'', function (err, rows) {
+        db.query('select personalinfo.*,userfollow.ifollowemail,userfollow.followedme from (personalinfo left join userfollow on personalinfo.email=userfollow.email) where personalinfo.email = \'' + email + '\'', function (err, rows) {
             // console.log( rows);
             if (rows.length != 0) {
                 res.json({
                     avatar: rows[0].avatar,
                     nickname: rows[0].nickname,
                     sex: rows[0].sex,
-                    birthday: rows[0].birthday
+                    birthday: rows[0].birthday,
+                    ifollowemail:rows[0].ifollowemail,
+                    followedme:rows[0].followedme
                 });
             } else {
                 res.json({});
@@ -745,4 +747,16 @@ router.post('/api/follow', function (req, res) {
     });
 });
 
+
+// 获取我关注的人列表（chat组件中）
+router.post('/api/getiFollowed',function (req,res) {
+    db.query('SELECT * FROM socialweb.userfollow where email=\''+req.body.email+'\';',function (err,rows) {
+        if (err) {
+            console.error(err);
+        }else {
+            // console.log(rows);
+            res.json(rows);
+        }
+    });
+});
 module.exports = router;
