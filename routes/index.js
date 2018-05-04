@@ -182,8 +182,8 @@ router.post('/api/getPersonalInfo', function (req, res) {
                     nickname: rows[0].nickname,
                     sex: rows[0].sex,
                     birthday: rows[0].birthday,
-                    ifollowemail:rows[0].ifollowemail,
-                    followedme:rows[0].followedme
+                    ifollowemail: rows[0].ifollowemail,
+                    followedme: rows[0].followedme
                 });
             } else {
                 res.json({});
@@ -325,6 +325,21 @@ router.post('/api/diary', function (req, res) {
     });
 });
 
+// 日记——谁关注了我
+router.post('/api/diarywhofollow', function (req, res) {
+    db.query('SELECT * FROM socialweb.userfollow where userfollow.email = \'' + req.body.email + '\'', function (err, rows) {
+        if (err) {
+            console.error(err);
+        }else {
+            let whoFollow = '';
+            if (rows.length!=0) {
+                whoFollow = rows[0].followedme ? rows[0].followedme : '';
+            }
+            res.json(whoFollow);
+        }
+    });
+});
+
 // 获取圈子信息
 router.post('/api/circle', function (req, res) {
     // left join on左表查询方式，通过diary.id这种方式选择需要的字段留下来，如果选择*，则会有重复字段
@@ -374,13 +389,14 @@ router.post('/api/circle', function (req, res) {
                                         obj.data = replydata;
                                         rows1[i].reply = obj.data;
                                     }
-                                    db.query('select * from diarycollect where email=\'' + req.body.email + '\'', function (err, rows3) {
+                                    db.query('select diarycollect.*,userfollow.followedme from (diarycollect left join userfollow on diarycollect.email=userfollow.email) where diarycollect.email=\'' + req.body.email + '\'', function (err, rows3) {
                                         if (rows3.length != 0) {
                                             // console.log(rowsSelect);
                                             res.json({
                                                 diary: rowsSelect,
                                                 comment: rows1,
-                                                collectDiary: rows3[0].diaryid
+                                                collectDiary: rows3[0].diaryid,
+                                                followedme: rows3[0].followedme
                                             });
                                         } else {
                                             res.json({diary: rowsSelect, comment: rows1, collectDiary: ''});
@@ -749,11 +765,11 @@ router.post('/api/follow', function (req, res) {
 
 
 // 获取我关注的人列表（chat组件中）
-router.post('/api/getiFollowed',function (req,res) {
-    db.query('SELECT * FROM socialweb.userfollow where email=\''+req.body.email+'\';',function (err,rows) {
+router.post('/api/getiFollowed', function (req, res) {
+    db.query('SELECT * FROM socialweb.userfollow where email=\'' + req.body.email + '\';', function (err, rows) {
         if (err) {
             console.error(err);
-        }else {
+        } else {
             // console.log(rows);
             res.json(rows);
         }

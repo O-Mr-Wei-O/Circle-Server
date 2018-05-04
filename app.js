@@ -90,6 +90,16 @@ io.on("connection", function (socket) {
 
     });
 
+    socket.on('newDiary',(me,followedme)=>{
+        for (let i=0;i<followedme.split(',').length;i++) {
+            if (userObject[followedme.split(',')[i]]) {
+                io.sockets.connected[userObject[followedme.split(',')[i]].socketid].emit("remindNewDiary",me);
+                console.log(me,'发送了新的日记',followedme.split(',')[i],'接收信号');
+            }
+        }
+
+    });
+
     // socket.emit('alluser',userObject);
     socket.emit('successlogin','连接成功');
 
